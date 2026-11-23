@@ -5,7 +5,7 @@
 // @homepageURL  https://github.com/neumannk/gcc-bonspiel-chart
 // @updateURL    https://raw.githubusercontent.com/neumannk/gcc-bonspiel-chart/main/gcc-bonspiel-team-view.user.js
 // @downloadURL  https://raw.githubusercontent.com/neumannk/gcc-bonspiel-chart/main/gcc-bonspiel-team-view.user.js
-// @version      0.1.0
+// @version      0.1.1
 // @description  Adds a clean team view (status, games with scores, road graph) below the existing info on Granite Curling Club bonspiel team pages. Works for any event with a schedule.
 // @match        https://curlingseattle.org/*
 // @match        https://www.curlingseattle.org/*
@@ -459,7 +459,7 @@
 
       let root0 = null, all = [], row = 0, maxDepth = 0;
       if (treeRoot) {
-        root0 = { id: 0, kind: 'R', parent: null, depth: 0, kids: [], game: treeRoot, term: null, opp: '' };
+        root0 = { id: 0, kind: 'R', parent: null, depth: 0, kids: [], game: treeRoot, term: null, opp: oppOf(treeRoot).name };
         root0.kids = [mkNode('W', treeRoot.w, treeRoot, root0, 1, 0), mkNode('L', treeRoot.l, treeRoot, root0, 1, 0)].filter(Boolean);
         const layout = (n) => {
           all.push(n);
@@ -483,11 +483,25 @@
         return { w, svg: `<rect class="tv-bs" x="${x}" y="${y - 11}" width="${w}" height="15" rx="3"/><text class="tv-bst" x="${x + w / 2}" y="${y}" text-anchor="middle">${esc(label)}</text>` };
       };
 
+      // Time, sheet badge, event circle and opponent for a game, starting at text x `tx`
+      const gameInfo = (n, tx, y) => {
+        const g = n.game, t1 = shortTime(g), tw = t1.length * 8.3;
+        const bx = tx + tw + 6;
+        const b = badge(bx, y - 3, sheetNum(g));
+        const L = prefixOf(g.id), er = 8 + (L.length - 1) * 4, ex = bx + b.w + 6 + er;
+        const opp = `v ${trunc(oppLabel(n.opp), 24)}`;
+        return {
+          endX: Math.max(ex + er, tx + opp.length * 6.4) + 8,
+          svg: `<text class="tv-nt" x="${tx}" y="${y - 2}">${esc(t1)}</text>${b.svg}`
+            + `<circle class="tv-ev" cx="${ex}" cy="${y - 6.5}" r="${er}"/><text class="tv-evt" x="${ex}" y="${y - 3}" text-anchor="middle">${esc(L)}</text>`
+            + `<text class="tv-ns" x="${tx}" y="${y + 13}">${esc(opp)}</text>`,
+        };
+      };
+
       // Connectors: a flat run out of the parent's label (or the root circle), then a gentle S-curve into
       // each child. When a game has both a win and a loss branch, the shared run is drawn once, solid;
       // only the curves after the split are solid (win) or dotted (loss).
       let edgesSvg = '', nodesSvg = '';
-      if (root0) root0.endX = rootX + 10;
       all.forEach((n) => {
         if (n.parent) {
           const p = n.parent, sx = p.endX, y1 = Y(p), x2 = X(n), y2 = Y(n);
@@ -502,22 +516,22 @@
             edgesSvg += `<path class="tv-e ${cls}" data-to="${n.id}" d="M${sx} ${y1}H${xs}${curve}"/>`;
           }
         }
-        if (n.id === 0) return;
         const x = X(n), y = Y(n);
+        if (n.id === 0) {
+          // The team's next game sits on the history line; show its details like every other game
+          const info = gameInfo(n, x + 18, y);
+          n.endX = info.endX;
+          nodesSvg += `<g>${info.svg}</g>`;
+          return;
+        }
         if (n.term) {
           nodesSvg += `<g class="tv-n" data-id="${n.id}"><circle class="tv-dot" cx="${x}" cy="${y}" r="2.5"/><text class="tv-tt" x="${x + 10}" y="${y + 4}">${esc(n.term)}</text></g>`;
           return;
         }
-        const g = n.game, t1 = shortTime(g), tw = t1.length * 8.3;
-        const bx = x + 10 + tw + 6;
-        const b = badge(bx, y - 3, sheetNum(g));
-        const L = prefixOf(g.id), er = 8 + (L.length - 1) * 4, ex = bx + b.w + 6 + er;
-        n.endX = Math.max(ex + er, x + 10 + `v ${trunc(oppLabel(n.opp), 24)}`.length * 6.4) + 8;
+        const info = gameInfo(n, x + 10, y);
+        n.endX = info.endX;
         nodesSvg += `<g class="tv-n" data-id="${n.id}"><rect class="tv-hit" x="${x - 4}" y="${y - 20}" width="${COLW - 20}" height="40"/>`
-          + `<circle class="tv-dot" cx="${x}" cy="${y}" r="3.5"/>`
-          + `<text class="tv-nt" x="${x + 10}" y="${y - 2}">${esc(t1)}</text>${b.svg}`
-          + `<circle class="tv-ev" cx="${ex}" cy="${y - 6.5}" r="${er}"/><text class="tv-evt" x="${ex}" y="${y - 3}" text-anchor="middle">${esc(L)}</text>`
-          + `<text class="tv-ns" x="${x + 10}" y="${y + 13}">v ${esc(trunc(oppLabel(n.opp), 24))}</text></g>`;
+          + `<circle class="tv-dot" cx="${x}" cy="${y}" r="3.5"/>${info.svg}</g>`;
       });
 
       // History path on the left: every confirmed game, in order
@@ -536,7 +550,7 @@
         const sc = scoreStr(g);
         const lab = isCur ? 'Next' : res === 'W' ? `Won${sc ? ' ' + sc : ''}` : res === 'L' ? `Lost${sc ? ' ' + sc : ''}` : '';
         const lw = lab ? lab.length * 6.6 + 6 : 0;
-        const hb = badge(lw, 0, sheetNum(g));
+        const hb = root0 && i === mine.length - 1 ? { svg: '' } : badge(lw, 0, sheetNum(g));
         hsvg += `<g transform="translate(${x + 3} ${hy - 17}) rotate(-35)">${lab ? `<text class="tv-hlab${isCur ? ' tv-gold' : ''}" x="0" y="0">${esc(lab)}</text>` : ''}${hb.svg}</g>`;
       });
 
