@@ -1,0 +1,20 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Node (test tooling, if added)
+node_modules/
+npm-debug.log*
+
+# Local scratch: saved copies of site pages, screenshots, logs
+fixtures-local/
+*.log
+
+# Claude Code local settings
+.claude/settings.local.json
